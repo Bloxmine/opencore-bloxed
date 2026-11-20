@@ -41,3 +41,4 @@ __pycache__/
 /.x86_64_venv
 *afdesign~lock~
 /.venv
+/logs

@@ -16,6 +16,8 @@ from .. import constants
 from ..datasets import os_data
 from ..volume   import generate_copy_arguments
 
+from .patchsets.shared_patches.metal_3802_web import WEB_SUPPORT_PATCH_SETS
+
 from ..support import (
     generate_smbios,
     subprocess_wrapper
@@ -112,6 +114,11 @@ class SysPatchHelpers:
             "OS Version": f"{self.constants.detected_os}.{self.constants.detected_os_minor} ({self.constants.detected_os_build})",
             "Custom Signature": bool(Path(self.constants.payload_local_binaries_root_path / ".signed").exists()),
         }
+
+        # Metal 3802 web support installs ad hoc signed binaries, which AMFIPass does not cover. Reporting the root
+        # as unsigned keeps AMFI disabled when OpenCore is rebuilt on this Mac (defaults._check_amfipass_supported)
+        if any(name in patchset for name in WEB_SUPPORT_PATCH_SETS):
+            data["Custom Signature"] = False
 
         data.update(patchset)
 
