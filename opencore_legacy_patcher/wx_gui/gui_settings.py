@@ -712,6 +712,9 @@ class SettingsFrame(wx.Frame):
                         "Fix WebGL drawing and WebGPU",
                         "crashes in Safari on Intel Ivy",
                         "Bridge and Haswell (macOS Tahoe).",
+                        "Needs AMFI fully off (amfi=0x80):",
+                        "rebuild and install OpenCore and",
+                        "reboot before root patching.",
                     ],
                     "override_function": self._update_global_settings,
                     "condition": self._has_metal_3802_intel_gpu()

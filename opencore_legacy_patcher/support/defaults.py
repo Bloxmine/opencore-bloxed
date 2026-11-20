@@ -386,6 +386,16 @@ class GenerateDefaults:
             # Rebuild it once you are on the host
             return
 
+        # Metal 3802 web support (Ivy Bridge/Haswell on Tahoe) installs ad hoc signed binaries into every Metal client,
+        # which AMFIPass does not cover: with AMFI enforcing, WindowServer finds no Metal device and never starts.
+        # Keep amfi=0x80 whenever the setting is on, so the EFI is right before and after root patching.
+        if (
+            self.constants.enable_metal3802_web is True and
+            self.constants.detected_os == os_data.os_data.tahoe and
+            any(gpu.arch in [device_probe.Intel.Archs.Ivy_Bridge, device_probe.Intel.Archs.Haswell] for gpu in self.constants.computer.gpus)
+        ):
+            return
+
         # Check for adhoc signed binaries
         if self.constants.computer.oclp_sys_signed is False:
             # Root patch with new binaries, then reboot

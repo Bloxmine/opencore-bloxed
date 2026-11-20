@@ -51,6 +51,20 @@ shader sources pass through untouched. `METAL3802_ANGLE_FIX=0` in a process's en
    from [tools/metal-argbuf](https://github.com/lythka/hao-patcher/tree/main/tools/metal-argbuf). Do **not** use
    libargbuf on Haswell: it replaces the working native encoder and crashes.
 
+## Requirement: AMFI disabled (`amfi=0x80`)
+
+The edited MTL driver and the shims are signed ad hoc. Every Metal client, WindowServer included, is a platform
+binary, and AMFIPass only lets OCLP's own (PatcherSupportPkg) binaries load into those. With AMFI enforcing, dyld
+refuses the driver ("mapping process is a platform binary, but mapped file is not"), Metal finds no device and
+WindowServer aborts in `CoreDisplay_CreateDisplayForCGXDisplayDevice` at every boot. The Mac never reaches the login
+window, in safe mode either. This happened on a MacBookPro11,1 whose OpenCore used AMFIPass without `amfi=0x80`.
+
+So with "WebGL/WebGPU Support" on, "Build and Install OpenCore" on an Ivy Bridge/Haswell Mac running Tahoe keeps
+`amfi=0x80` (and the library validation patches) instead of relying on AMFIPass. The patch sets install only when AMFI
+is actually disabled in the current boot (`amfi=0x80` or `amfi_get_out_of_my_way=1`); otherwise they are skipped with
+a warning. Order: turn the setting on, build and install OpenCore, reboot, then root patch. Once installed, the root
+patch plist also reports `Custom Signature: false`.
+
 ## What gets installed (Tahoe only)
 
 | GPU | Files | Setting |

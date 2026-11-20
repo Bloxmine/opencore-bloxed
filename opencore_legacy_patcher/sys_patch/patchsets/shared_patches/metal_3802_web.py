@@ -2,12 +2,32 @@
 metal_3802_web.py: Metal 3802 web support (WebGL and WebGPU in Safari) for Intel Ivy Bridge and Haswell
 """
 
+import logging
+
+from functools import cache
+
 from .base import BaseSharedPatchSet
 
 from ..base import PatchType, DynamicPatchset
 
 from ....constants      import Constants
 from ....datasets.os_data import os_data
+from ....detections     import amfi_detect
+
+
+# Root patch plist entries; a root with either one holds ad hoc signed binaries (see sys_patch_helpers)
+WEB_SUPPORT_PATCH_SETS = ["Intel Ivy Bridge Web Support", "Intel Haswell Web Support"]
+
+
+@cache
+def amfi_allows_adhoc_binaries() -> bool:
+    """
+    The edited MTL driver and the shims are signed ad hoc, and every Metal client (WindowServer included) is a
+    platform binary. AMFIPass only lets OCLP's PatcherSupportPkg binaries through: with AMFI enforcing, dyld refuses
+    the driver ("mapping process is a platform binary, but mapped file is not"), Metal has no device and
+    WindowServer aborts in CoreDisplay at every boot. So AMFI itself must be off (amfi=0x80), AMFIPass or not.
+    """
+    return amfi_detect.AmfiConfigurationDetection().check_config(amfi_detect.AmfiConfigDetectLevel.ALLOW_ALL)
 
 
 class Metal3802Web(BaseSharedPatchSet):
@@ -21,7 +41,12 @@ class Metal3802Web(BaseSharedPatchSet):
         """
         Built and tested against Tahoe's WebKit and OCLP's Tahoe Metal 3802 stack
         """
-        return self._xnu_major == os_data.tahoe.value and self._constants.enable_metal3802_web is True
+        if self._xnu_major != os_data.tahoe.value or self._constants.enable_metal3802_web is not True:
+            return False
+        if amfi_allows_adhoc_binaries() is False:
+            logging.warning("- Skipping WebGL/WebGPU Support: it needs AMFI disabled (amfi=0x80); AMFIPass does not cover its ad hoc signed files")
+            return False
+        return True
 
 
     def _common_files(self) -> dict:
@@ -47,7 +72,7 @@ class Metal3802Web(BaseSharedPatchSet):
             return {}
 
         return {
-            "Intel Ivy Bridge Web Support": {
+            WEB_SUPPORT_PATCH_SETS[0]: {
                 PatchType.OVERWRITE_SYSTEM_VOLUME: {
                     **self._common_files(),
                     "/System/Library/Extensions/AppleIntelHD4000GraphicsMTLDriver.bundle/Contents/MacOS": {
@@ -74,7 +99,7 @@ class Metal3802Web(BaseSharedPatchSet):
             return {}
 
         return {
-            "Intel Haswell Web Support": {
+            WEB_SUPPORT_PATCH_SETS[1]: {
                 PatchType.OVERWRITE_SYSTEM_VOLUME: {
                     **self._common_files(),
                     "/System/Library/Extensions/AppleIntelHD5000GraphicsMTLDriver.bundle/Contents/MacOS": {
