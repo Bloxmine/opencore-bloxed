@@ -8,15 +8,19 @@
     Server and client must have the same signing
     certificate in order to run commands.
     ------------------------------------------------
+    opencore-bloxed: the client's signature must be
+    valid and made with this helper's own leaf
+    certificate (the fork's signing key), instead
+    of carrying Dortania's Team ID.
+    ------------------------------------------------
 */
 
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
+#import <CommonCrypto/CommonDigest.h>
 #include <libproc.h>
 
-#define UTILITY_VERSION "1.0.0"
-
-#define VALID_CLIENT_TEAM_ID @"S74BDJXQMD"
+#define UTILITY_VERSION "1.0.0-bloxed"
 
 #define OCLP_PHT_ERROR_MISSING_ARGUMENTS           160
 #define OCLP_PHT_ERROR_SET_UID_MISSING             161
@@ -45,6 +49,44 @@ NSDictionary *getSigningInformationFromPath(NSString *path) {
     }
 
     return (__bridge NSDictionary *)codeDict;
+}
+
+SecRequirementRef copySameLeafRequirement(NSDictionary *signingInformation) {
+    // "certificate leaf = H"<SHA-1 of the leaf certificate>"", built from this helper's own signature
+    NSArray *certificates = signingInformation[(__bridge NSString *)kSecCodeInfoCertificates];
+    if (certificates == nil || certificates.count == 0) {
+        return NULL;
+    }
+
+    CFDataRef leaf = SecCertificateCopyData((__bridge SecCertificateRef)certificates[0]);
+    unsigned char digest[CC_SHA1_DIGEST_LENGTH];
+    CC_SHA1(CFDataGetBytePtr(leaf), (CC_LONG)CFDataGetLength(leaf), digest);
+    CFRelease(leaf);
+
+    NSMutableString *hash = [NSMutableString string];
+    for (int i = 0; i < CC_SHA1_DIGEST_LENGTH; i++) {
+        [hash appendFormat:@"%02x", digest[i]];
+    }
+
+    SecRequirementRef requirement = NULL;
+    NSString *requirementString = [NSString stringWithFormat:@"certificate leaf = H\"%@\"", hash];
+    if (SecRequirementCreateWithString((__bridge CFStringRef)requirementString, kSecCSDefaultFlags, &requirement) != errSecSuccess) {
+        return NULL;
+    }
+    return requirement;
+}
+
+BOOL isValidlySignedWithRequirement(NSString *path, SecRequirementRef requirement) {
+    SecStaticCodeRef codeRef;
+    OSStatus status = SecStaticCodeCreateWithPath((__bridge CFURLRef)[NSURL fileURLWithPath:path], kSecCSDefaultFlags, &codeRef);
+    if (status != errSecSuccess) {
+        return NO;
+    }
+
+    // Code and signature only: the app bundle's resources are hundreds of MB, and this runs on every command
+    status = SecStaticCodeCheckValidity(codeRef, kSecCSDoNotValidateResources | kSecCSCheckAllArchitectures, requirement);
+    CFRelease(codeRef);
+    return status == errSecSuccess;
 }
 
 NSString *getParentProcessPath() {
@@ -111,16 +153,17 @@ int main(int argc, const char * argv[]) {
         }
 
         #ifdef DEBUG
-        // Skip Team ID check in debug mode
+        // Skip signature checks in debug mode
         // DO NOT USE IN PRODUCTION
         #else
-        // Check Team ID
-        if (![processSigningInformation[@"teamid"] isEqualToString:VALID_CLIENT_TEAM_ID] || ![parentProcessSigningInformation[@"teamid"] isEqualToString:VALID_CLIENT_TEAM_ID]) {
-            return OCLP_PHT_ERROR_INVALID_TEAM_ID;
+        // Check that both are validly signed with this helper's leaf certificate
+        SecRequirementRef requirement = copySameLeafRequirement(processSigningInformation);
+        if (requirement == NULL) {
+            return OCLP_PHT_ERROR_SIGNING_INFORMATION_MISSING;
         }
-
-        // Check Certificates
-        if (![processSigningInformation[@"certificates"] isEqualToArray:parentProcessSigningInformation[@"certificates"]]) {
+        BOOL valid = isValidlySignedWithRequirement(processPath, requirement) && isValidlySignedWithRequirement(parentProcessPath, requirement);
+        CFRelease(requirement);
+        if (!valid) {
             return OCLP_PHT_ERROR_INVALID_CERTIFICATES;
         }
         #endif

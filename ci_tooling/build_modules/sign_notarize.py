@@ -2,6 +2,7 @@
 sign_notarize.py: Sign and Notarize a file
 """
 
+import subprocess
 import mac_signing_buddy
 import macos_pkg_builder
 
@@ -29,6 +30,9 @@ class SignAndNotarize:
         Sign and Notarize
         """
         if not all([self._signing_identity, self._notarization_apple_id, self._notarization_password, self._notarization_team_id]):
+            if self._signing_identity and not self._path.name.endswith(".pkg"):
+                self._sign_only()
+                return
             print("Signing and Notarization details not provided, skipping")
             return
 
@@ -52,3 +56,18 @@ class SignAndNotarize:
             team_id=self._notarization_team_id,
             file=self._path,
         ).sign()
+
+
+    def _sign_only(self) -> None:
+        """
+        Sign without notarizing (opencore-bloxed: self-signed key, see ci_tooling/signing)
+
+        Same codesign arguments as mac_signing_buddy.Sign, which refuses identities macOS does not trust
+        """
+        print(f"Signing {self._path.name} (no notarization)")
+        arguments = ["/usr/bin/codesign", "--force", "--verify", "--verbose", "--options=runtime", "--sign", self._signing_identity]
+        if self._path.is_dir():
+            arguments.insert(1, "--deep")
+        if self._entitlements:
+            arguments += ["--entitlements", str(Path(self._entitlements).resolve())]
+        subprocess.run(arguments + [str(self._path.resolve())], check=True)
