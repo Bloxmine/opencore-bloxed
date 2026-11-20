@@ -34,6 +34,7 @@ class GenerateDiskImages:
             "OpenCore",
             "Tools",
             "Launch Services",
+            "Metal3802Web",
         ]
 
         whitelist_files = []

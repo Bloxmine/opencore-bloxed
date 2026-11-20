@@ -216,6 +216,8 @@ class Constants:
 
         ## Graphics Settings
         self.allow_ts2_accel:             bool = True  #  Set TeraScale 2 Acceleration support
+        self.enable_metal3802_web:        bool = True  #  Set WebGL/WebGPU fixes for Ivy Bridge and Haswell on Tahoe
+        self.enable_hd4000_webgpu:        bool = False  # Set HD 4000 argument buffers for WebGPU (experimental)
         self.drm_support:                 bool = False  # Set iMac14,x DRM support
         self.force_nv_web:                bool = False  # Force Nvidia Web Drivers on Tesla and Kepler
         self.force_output_support:        bool = False  # Force Output support for Mac Pros with PC VBIOS

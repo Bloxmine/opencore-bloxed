@@ -1,0 +1,58 @@
+<!doctype html><html><body style="margin:0;background:#fff">
+<canvas id="gl" width="128" height="128"></canvas><canvas id="gpu" width="128" height="128"></canvas>
+<script>
+const R = (k, v) => window.webkit.messageHandlers.r.postMessage(k + ': ' + v);
+try {
+  const c = document.getElementById('gl');
+  const gl = c.getContext('webgl', {preserveDrawingBuffer: true}) || null;
+  if (!gl) R('webgl', 'NO CONTEXT');
+  else {
+    const di = gl.getExtension('WEBGL_debug_renderer_info');
+    R('webgl renderer', di ? gl.getParameter(di.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    R('webgl version', gl.getParameter(gl.VERSION));
+    gl.clearColor(0, 0, 1, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    let p = new Uint8Array(4); gl.readPixels(64, 64, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, p);
+    R('webgl clear readback', p.join(',') + ' (want 0,0,255,255)');
+    const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o);
+      if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) R('webgl shader', gl.getShaderInfoLog(o)); return o; };
+    const pr = gl.createProgram();
+    gl.attachShader(pr, sh(gl.VERTEX_SHADER, 'attribute vec2 a; void main(){gl_Position=vec4(a,0.,1.);}'));
+    gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, 'precision mediump float; uniform vec4 u; void main(){gl_FragColor=u;}'));
+    gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) R('webgl link', gl.getProgramInfoLog(pr));
+    gl.useProgram(pr);
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform4f(gl.getUniformLocation(pr, 'u'), 0, 1, 0, 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    p = new Uint8Array(4); gl.readPixels(64, 64, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, p);
+    R('webgl draw readback', p.join(',') + ' (want 0,255,0,255; clear-only = 0,0,255,255)');
+    R('webgl error', gl.getError());
+  }
+} catch (e) { R('webgl exc', e); }
+(async () => {
+  try {
+    if (!navigator.gpu) { R('webgpu', 'navigator.gpu missing'); return R('done', 1); }
+    const ad = await navigator.gpu.requestAdapter();
+    if (!ad) { R('webgpu', 'no adapter'); return R('done', 1); }
+    R('webgpu adapter', JSON.stringify(ad.info || {}));
+    const dev = await ad.requestDevice();
+    dev.lost.then(i => R('webgpu lost', i.message));
+    dev.addEventListener('uncapturederror', e => R('webgpu error', e.error.message));
+    const N = 64, sb = dev.createBuffer({size: N*4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC});
+    const rb = dev.createBuffer({size: N*4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST});
+    const cm = dev.createShaderModule({code: `@group(0) @binding(0) var<storage, read_write> o: array<u32>;
+      @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3u) { o[id.x] = id.x*id.x + 7u; }`});
+    const cp = dev.createComputePipeline({layout: 'auto', compute: {module: cm, entryPoint: 'main'}});
+    R('webgpu', 'pipeline made');
+    const bg = dev.createBindGroup({layout: cp.getBindGroupLayout(0), entries: [{binding: 0, resource: {buffer: sb}}]});
+    let enc = dev.createCommandEncoder(); let pass = enc.beginComputePass();
+    pass.setPipeline(cp); pass.setBindGroup(0, bg); pass.dispatchWorkgroups(1); pass.end();
+    enc.copyBufferToBuffer(sb, 0, rb, 0, N*4); dev.queue.submit([enc.finish()]);
+    await rb.mapAsync(GPUMapMode.READ); const r = new Uint32Array(rb.getMappedRange().slice(0)); rb.unmap();
+    let bad = 0; for (let i = 0; i < N; i++) if (r[i] !== i*i+7) bad++;
+    R('webgpu compute', bad ? 'WRONG ' + bad + ' first=' + Array.from(r.slice(0,4)) : 'OK 64/64');
+  } catch (e) { R('webgpu exc', e); }
+  R('done', 1);
+})();
+</script></body></html>

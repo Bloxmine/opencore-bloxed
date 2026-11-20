@@ -20,6 +20,7 @@ class PatchType(StrEnum):
 
 class DynamicPatchset(StrEnum):
     MetallibSupportPkg = "MetallibSupportPkg"
+    Metal3802Web       = "Metal3802Web"
 
 
 class BasePatchset:

@@ -12,6 +12,7 @@ from ...shared_patches.monterey_opencl import MontereyOpenCL
 from ...shared_patches.tahoe_graphics  import TahoeGraphics
 from ...shared_patches.big_sur_opencl  import BigSurOpenCL
 from ...shared_patches.monterey_webkit import MontereyWebKit
+from ...shared_patches.metal_3802_web  import Metal3802Web
 
 from .....constants  import Constants
 from .....detections import device_probe
@@ -120,4 +121,5 @@ class IntelIvyBridge(BaseHardware):
             **MontereyWebKit(self._xnu_major, self._xnu_minor, self._os_build).patches(),
             **TahoeGraphics(self._xnu_major, self._xnu_minor, self._constants.detected_os_version).patches(),
             **self._model_specific_patches(),
+            **Metal3802Web(self._xnu_major, self._xnu_minor, self._constants.detected_os_version, self._constants).ivy_bridge_patches(),
         }

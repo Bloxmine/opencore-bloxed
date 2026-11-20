@@ -50,7 +50,8 @@ from .utilities import (
     install_new_file,
     remove_file,
     PatcherSupportPkgMount,
-    KernelDebugKitMerge
+    KernelDebugKitMerge,
+    Metal3802WebStaging
 )
 
 from .. import constants
@@ -509,6 +510,8 @@ class PatchSysVolume:
         """
         if variant == DynamicPatchset.MetallibSupportPkg:
             return self._resolve_metallib_support_pkg()
+        if variant == DynamicPatchset.Metal3802Web:
+            return Metal3802WebStaging(self.constants, str(self.constants.payload_local_binaries_root_path)).stage()
 
         raise Exception(f"Unknown Dynamic Patchset: {variant}")
 

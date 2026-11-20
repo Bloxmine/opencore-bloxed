@@ -33,6 +33,7 @@ from ..datasets import (
     os_data,
     cpu_data
 )
+from ..detections import device_probe
 
 
 class SettingsFrame(wx.Frame):
@@ -702,6 +703,33 @@ class SettingsFrame(wx.Frame):
                     "override_function": self._update_global_settings,
                     "condition": not bool(self.constants.computer.real_model not in ["MacBookPro8,2", "MacBookPro8,3"])
                 },
+                "WebGL/WebGPU Support": {
+                    "type": "checkbox",
+                    "value": self.constants.enable_metal3802_web,
+                    "variable": "Metal3802_Web_Support",
+                    "constants_variable": "enable_metal3802_web",
+                    "description": [
+                        "Fix WebGL drawing and WebGPU",
+                        "crashes in Safari on Intel Ivy",
+                        "Bridge and Haswell (macOS Tahoe).",
+                    ],
+                    "override_function": self._update_global_settings,
+                    "condition": self._has_metal_3802_intel_gpu()
+                },
+                "HD 4000 WebGPU (Experimental)": {
+                    "type": "checkbox",
+                    "value": self.constants.enable_hd4000_webgpu,
+                    "variable": "HD4000_WebGPU",
+                    "constants_variable": "enable_hd4000_webgpu",
+                    "description": [
+                        "Add Metal argument buffers to the",
+                        "Intel HD 4000 driver for WebGPU",
+                        "in Safari (from hao-patcher).",
+                        "Requires WebGL/WebGPU Support.",
+                    ],
+                    "override_function": self._update_global_settings,
+                    "condition": self._has_metal_3802_intel_gpu(ivy_bridge_only=True)
+                },
             },
             "App": {
                 "General": {
@@ -1031,6 +1059,11 @@ Hardware Information:
         if tmp_value is None:
             tmp_value = "PYTHON_NONE_VALUE"
         global_settings.GlobalEnviromentSettings().write_property(f"GUI:{variable}", tmp_value)
+
+
+    def _has_metal_3802_intel_gpu(self, ivy_bridge_only: bool = False) -> bool:
+        archs = [device_probe.Intel.Archs.Ivy_Bridge] if ivy_bridge_only else [device_probe.Intel.Archs.Ivy_Bridge, device_probe.Intel.Archs.Haswell]
+        return any(gpu.arch in archs for gpu in self.constants.computer.gpus)
 
 
     def _update_global_settings(self, variable, value, global_setting = None):

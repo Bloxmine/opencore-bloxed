@@ -108,6 +108,12 @@ class GenerateDefaults:
                 global_settings.GlobalEnviromentSettings().write_property("MacBookPro_TeraScale_2_Accel", False)
                 self.constants.allow_ts2_accel = False
 
+        # Metal 3802 web support (Ivy Bridge and Haswell on Tahoe): on unless turned off in settings
+        if global_settings.GlobalEnviromentSettings().read_property("Metal3802_Web_Support") is False:
+            self.constants.enable_metal3802_web = False
+        if global_settings.GlobalEnviromentSettings().read_property("HD4000_WebGPU") is True:
+            self.constants.enable_hd4000_webgpu = True
+
         if self.model in smbios_data.smbios_dictionary:
             if smbios_data.smbios_dictionary[self.model]["CPU Generation"] >= cpu_data.CPUGen.skylake.value:
                 # On 2016-2017 MacBook Pros, 15" devices used a stock Samsung SSD with IONVMeController
