@@ -51,6 +51,29 @@ shader sources pass through untouched. `METAL3802_ANGLE_FIX=0` in a process's en
    from [tools/metal-argbuf](https://github.com/lythka/hao-patcher/tree/main/tools/metal-argbuf). Do **not** use
    libargbuf on Haswell: it replaces the working native encoder and crashes.
 
+### Canvases on screen: Safari's GPU-process DOM rendering (dual-core Macs)
+
+With the draws fixed, WebGL and WebGPU canvases can still stay empty on screen, with no error anywhere: `readPixels`
+and `drawImage` of the canvas are correct, but the canvas's own layer never shows a frame. Traced in Safari 27.2
+(WebKit 21625.2.8, Safari's own ANGLE 2.1.28778) on the MacBookPro11,1:
+
+1. The GPU process renders each frame into its IOSurface and hands a send right to the page (WebContent) process.
+2. WebKit shows a delegated canvas only in `RemoteLayerWithRemoteRenderingBackingStore::prepareToDisplay`
+   (`performDelegatedLayerDisplay`), the backing store used when DOM rendering runs in the GPU process. The
+   in-process variant (`RemoteLayerWithInProcessRenderingBackingStore`) never asks the canvas for its frame, so the
+   canvas layer reaches Safari's UI process with nil contents.
+3. Which variant is used comes from `defaultUseGPUProcessForDOMRenderingEnabled()`: on the Mac it is
+   `numberOfPhysicalProcessorCores() >= 4`. Every Mac that runs Tahoe officially has 4 cores or more; the dual-core
+   Ivy Bridge/Haswell MacBooks (MacBookPro11,1: i5-4258U, 2 cores) get in-process DOM rendering and blank canvases.
+
+**Fix:** Safari's feature flag "GPU Process: DOM Rendering" (`WebKitExperimentalUseGPUProcessForDOMRenderingEnabled`
+in Safari's preferences). After a root patch that installs web support on a Mac with fewer than 4 physical cores,
+the patcher turns it on for the user who runs it
+([safari_gpu_dom_rendering.py](../opencore_legacy_patcher/sys_patch/utilities/safari_gpu_dom_rendering.py)); it
+needs access to Safari's container (macOS asks for it) and otherwise logs how to set it by hand (Develop > Feature
+Flags). Reverting root patches, or patching without web support, turns it back off only if the patcher set it.
+Restart Safari after either.
+
 ## Requirement: AMFI disabled (`amfi=0x80`)
 
 The edited MTL driver and the shims are signed ad hoc. Every Metal client, WindowServer included, is a platform
@@ -91,7 +114,7 @@ Changes to hao-patcher's sources ([src/hao](src/hao), from 5b0276f):
 | | Haswell (MacBookPro11,1, Iris 5100, 26.7.1) | Ivy Bridge (HD 4000) |
 |---|---|---|
 | WebGL draws through Safari's ANGLE | **fixed** (ES 3.0 scene: textures, depth, indexed, matrices) | expected: the same compiler path; run `verify.sh` |
-| WebGL canvas on screen | works once draws work | hao-patcher reports it doesn't on macOS 27; not checked on Tahoe |
+| WebGL canvas on screen | **works** with "GPU Process: DOM Rendering" on (dual-core: the patcher sets it); blank without it | the same WebKit path; MacBookPro9,2 is dual-core too (hao-patcher #23 shows the blank canvases) |
 | WebGPU `setShaderValidation:` abort | **fixed** | fixed (same shim, validated by hao-patcher on HD 4000) |
 | WebGPU argument buffers | native, works | libargbuf: validated by hao-patcher on macOS 27, not on Tahoe |
 | Whole system with the patch installed | **not yet run**: needs a root patch | **not yet run** |

@@ -5,3 +5,4 @@ from .files import install_new_file, remove_file, fix_permissions
 from .dmg_mount import PatcherSupportPkgMount
 from .kdk_merge import KernelDebugKitMerge
 from .metal3802_web import Metal3802WebStaging
+from .safari_gpu_dom_rendering import SafariGPUDOMRendering

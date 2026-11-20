@@ -51,8 +51,10 @@ from .utilities import (
     remove_file,
     PatcherSupportPkgMount,
     KernelDebugKitMerge,
-    Metal3802WebStaging
+    Metal3802WebStaging,
+    SafariGPUDOMRendering
 )
+from .patchsets.shared_patches.metal_3802_web import WEB_SUPPORT_PATCH_SETS
 
 from .. import constants
 
@@ -91,6 +93,7 @@ class PatchSysVolume:
         self.needs_kmutil_exemptions = False # For '/Library/Extensions' rebuilds
         self.kdk_path = None
         self.metallib_path = None
+        self.installed_web_support = False # Set by _execute_patchset when a Web Support patch set was installed
 
         if hardware_details is None:
             hardware_details = HardwarePatchsetDetection(self.constants).device_properties
@@ -164,6 +167,31 @@ class PatchSysVolume:
         return True
 
 
+    def _verify_root_volume_mounted(self, step: str) -> None:
+        """
+        Abort if the root volume is no longer mounted at the mount location
+
+        softwareupdated shares /System/Volumes/Update/mnt1 with us: when it starts (e.g. a periodic
+        update check), CleanupPreparePathService unmounts whatever is mounted there. Without this
+        check the patcher keeps going, silently skips every install whose folder no longer exists,
+        writes the rest into the bare mnt1 folder on the Update volume, and only fails at bless.
+
+        Parameters:
+            step (str): What was about to run, for the error message
+        """
+        if self.root_supports_snapshot is False:
+            return
+
+        mount_path = Path(self.mount_location)
+        if mount_path.is_mount() and (mount_path / "System/Library/CoreServices/SystemVersion.plist").exists():
+            return
+
+        logging.error(f"- Root volume is no longer mounted at {self.mount_location} (before: {step})")
+        logging.error("- Something else unmounted it, most likely macOS Software Update checking for updates")
+        logging.error("- Nothing has been applied: the booted snapshot is unchanged. Turn off automatic update checks and patch again")
+        raise RuntimeError(f"Root volume was unmounted from {self.mount_location} during patching")
+
+
     def _merge_kdk_with_root(self, save_hid_cs: bool = False) -> None:
         """
         Merge Kernel Debug Kit (KDK) with the root volume
@@ -199,6 +227,7 @@ class PatchSysVolume:
         ).clean_auxiliary_kc()
 
         self.constants.root_patcher_succeeded = True
+        self._update_safari_dom_rendering()
         logging.info("- Unpatching complete")
         logging.info("\nPlease reboot the machine for patches to take effect")
 
@@ -214,12 +243,14 @@ class PatchSysVolume:
         Returns:
             bool: True if successful, False if not
         """
+        self._verify_root_volume_mounted("rebuilding kernel cache")
         if self._rebuild_kernel_cache() is False:
             return False
 
         self._update_preboot_kernel_cache()
         self._rebuild_dyld_shared_cache()
 
+        self._verify_root_volume_mounted("creating APFS snapshot")
         if self._create_new_apfs_snapshot() is False:
             return False
 
@@ -383,7 +414,23 @@ class PatchSysVolume:
                 needs_daemon = True
             InstallAutomaticPatchingServices(self.constants).install_auto_patcher_launch_agent(kdk_caching_needed=needs_daemon)
 
-        self._rebuild_root_volume()
+        if self._rebuild_root_volume() is True:
+            self._update_safari_dom_rendering()
+
+
+    def _update_safari_dom_rendering(self) -> None:
+        """
+        WebGL/WebGPU canvases only show with Safari's GPU-process DOM rendering, which WebKit leaves off on
+        dual-core Macs: turn it on with web support, and undo the patcher's own change without it
+        Never fails patching: on error the log says how to set the flag by hand
+        """
+        try:
+            if self.installed_web_support is True:
+                SafariGPUDOMRendering().enable()
+            else:
+                SafariGPUDOMRendering().disable_if_set_by_patcher()
+        except Exception as e:
+            logging.warning(f"- Could not update Safari's 'GPU Process: DOM Rendering' setting: {e}")
 
 
     def _execute_patchset(self, required_patches: dict):
@@ -403,6 +450,7 @@ class PatchSysVolume:
         source_files_path = str(self.constants.payload_local_binaries_root_path)
         required_patches = self._preflight_checks(required_patches, source_files_path)
         for patch in required_patches:
+            self._verify_root_volume_mounted(f"patch set '{patch}'")
             logging.info("- Installing Patchset: " + patch)
             for method_remove in [PatchType.REMOVE_SYSTEM_VOLUME, PatchType.REMOVE_DATA_VOLUME]:
                 if method_remove in required_patches[patch]:
@@ -470,6 +518,9 @@ class PatchSysVolume:
         if "Metal 3802 Common Extended" in required_patches:
             sys_patch_helpers.SysPatchHelpers(self.constants).patch_gpu_compiler_libraries(mount_point=self.mount_location)
 
+        self.installed_web_support = any(name in required_patches for name in WEB_SUPPORT_PATCH_SETS)
+
+        self._verify_root_volume_mounted("writing patchset information")
         self._write_patchset(required_patches)
 
 

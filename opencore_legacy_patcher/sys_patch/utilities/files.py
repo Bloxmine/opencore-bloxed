@@ -30,7 +30,7 @@ def install_new_file(source_folder: Path, destination_folder: Path, file_name: s
     file_name_str = str(file_name)
 
     if not Path(destination_folder).exists():
-        logging.info(f"  - Skipping {file_name}, cannot locate {source_folder}")
+        logging.info(f"  - Skipping {file_name}, destination folder does not exist: {destination_folder}")
         return
 
     if method in [PatchType.MERGE_SYSTEM_VOLUME, PatchType.MERGE_DATA_VOLUME]:
