@@ -13,6 +13,10 @@ What the fork adds on top of upstream OCLP:
   ([ci_tooling/signing/](ci_tooling/signing/README.md)). Upstream's helper rejects fork builds.
 - **No official updates**: the updater and the nightly installer are disabled, because they would replace this fork.
 - **Linux tools** ([linux/](linux/README.md)) to build the OpenCore EFI and a rescue USB when no Mac is available.
+- **Non-Metal app issues** (open; to be worked on from a non-Metal Mac): Photos video crashes WindowServer, Photos'
+  Library view is disabled without Metal, Word's selection box, Maps. Hand-off notes and diagnostic tools are in
+  [nonmetal_apps/](nonmetal_apps/README.md); read it before working on non-Metal. On that machine, the hardware and
+  recovery details in this file (MacBookPro11,1) do not apply: record the machine first, as the README says.
 
 ## Layout
 
