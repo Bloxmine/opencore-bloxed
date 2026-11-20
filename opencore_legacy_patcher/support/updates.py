@@ -87,6 +87,9 @@ class CheckBinaryUpdates:
             dict: Dictionary with Link and Version of the latest binary update if available
         """
 
+        # opencore-bloxed: official OCLP releases would replace this fork (and its patch sets), so none are offered
+        return None
+
         if self.constants.special_build is True:
             # Special builds do not get updates through the updater
             return None

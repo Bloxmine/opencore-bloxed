@@ -159,9 +159,8 @@ Please check the Github page for more information about this release."""
 
                 logging.info("- No new binaries found on Github, proceeding with patching")
 
+                # opencore-bloxed: no official release check (see support/updates.py)
                 warning_str = ""
-                if network_handler.NetworkUtilities("https://api.github.com/repos/dortania/OpenCore-Legacy-Patcher/releases/latest").verify_network_connection() is False:
-                    warning_str = f"""\n\nWARNING: We're unable to verify whether there are any new releases of OpenCore Legacy Patcher on Github. Be aware that you may be using an outdated version for this OS. If you're unsure, verify on Github that OpenCore Legacy Patcher {self.constants.patcher_version} is the latest official release"""
 
                 args = [
                     "/usr/bin/osascript",
